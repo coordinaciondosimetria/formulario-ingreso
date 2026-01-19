@@ -6,7 +6,7 @@ import io
 import os
 import json
 import unicodedata
-from supabase import create_client, Client # 🔴 IMPORTANTE: Librería nueva
+from supabase import create_client, Client
 
 # --- CONFIGURACIÓN ---
 st.set_page_config(
@@ -16,17 +16,16 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# --- CONEXIÓN A SUPABASE (BASE DE DATOS) ---
-# 🔴 OJO: REEMPLAZA ESTOS VALORES CON LOS DE TU PROYECTO SUPABASE
-SUPABASE_URL = "https://kxfbkqfswyuzmwfmnfnc.supabase.co"
-SUPABASE_KEY = "sb_publishable_n5Wz6tvlvBxrkgxKYJQ7Jg_VqkmwP61"
-
-# Intentar conectar (Manejo de error si no hay credenciales puestas aún)
+# --- CONEXIÓN A SUPABASE ---
+# Usamos st.secrets para que sea seguro en la nube
 try:
-    supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
-except Exception as e:
-    supabase = None
-    print(f"Advertencia: No se pudo conectar a Supabase. {e}")
+    SUPABASE_URL = st.secrets["SUPABASE_URL"]
+    SUPABASE_KEY = st.secrets["SUPABASE_KEY"]
+except:
+    st.error("No se detectaron los secretos de conexión.")
+    st.stop()
+
+supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 # --- CARGAR DATOS COLOMBIA ---
 @st.cache_data
@@ -371,12 +370,26 @@ with t1:
             else: st.session_state.usuarios.extend([{"Nombres":"","Apellidos":"","Tipo Doc":"CC","Documento":"","Correo":"","F. Nacimiento":str(date(1990,1,1)),"Genero":"OTRO","Nivel":"PROFESIONAL","Titulo":"OTRO","Ocupacion":"OTRO","Area":"RADIOLOGIA","Otra Area":"","Sede":sg,"Cobertura":"ARL","Tecnologia":tg,"Periodicidad":pg,"Ubicaciones":"TORAX","F. Inicio":str(date.today().replace(day=1))} for _ in range(nr)]); st.rerun()
 
 with t2:
-    c1, c2 = st.columns([1,2]); c1.download_button("📥 Plantilla", generar_plantilla_excel(), "Plantilla.xlsx", use_container_width=True)
+    c1, c2 = st.columns([1,2])
+    c1.download_button("📥 Plantilla", generar_plantilla_excel(), "Plantilla.xlsx", use_container_width=True)
     u = st.file_uploader("Excel", ["xlsx"], label_visibility="collapsed")
+    
     if u and st.button("Procesar", type="primary", use_container_width=True):
         us, er = procesar_excel_masivo(u)
-        if er: [st.error(e) for e in er if "Duplicado" not in e]; [st.warning(e) for e in er if "Duplicado" in e]
-        if us: st.session_state.usuarios.extend(us); st.success(f"✅ {len(us)} OK")
+        
+        # --- CORRECCIÓN AQUÍ ---
+        # Antes usabas [...] lo que generaba el error visual.
+        # Ahora usamos un bucle for limpio:
+        if er:
+            for e in er:
+                if "Duplicado" in e:
+                    st.warning(e)
+                else:
+                    st.error(e)
+        
+        if us: 
+            st.session_state.usuarios.extend(us)
+            st.success(f"✅ {len(us)} usuarios cargados correctamente.")
 
 if st.session_state.usuarios:
     st.divider(); m1, m2 = st.columns(2); m1.metric("Usuarios", len(st.session_state.usuarios)); m2.metric("Sedes", len({u["Sede"] for u in st.session_state.usuarios}))
